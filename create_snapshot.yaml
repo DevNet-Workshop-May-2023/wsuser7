@@ -7,8 +7,8 @@
     - name: Create a Snapshot
       aci_config_snapshot:
         host: "{{ inventory_hostname }}"
-        username: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') }}"
-        password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') }}"
+        username: "wsuser7"
+        password: "DevnetWorkshop!"
         use_ssl: yes
         validate_certs: no
         export_policy: config_backup
