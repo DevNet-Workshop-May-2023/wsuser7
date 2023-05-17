@@ -1,0 +1,18 @@
+- name: Play 1 Create a Snapshot
+  hosts: all
+  gather_facts: no
+
+  tasks:
+
+    - name: Create a Snapshot
+      aci_config_snapshot:
+        host: "{{ inventory_hostname }}"
+        username: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') }}"
+        password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') }}"
+        use_ssl: yes
+        validate_certs: no
+        export_policy: config_backup
+        state: present
+        max_count: 10
+        description: "Snapshot created by Ansible"
+      delegate_to: localhost

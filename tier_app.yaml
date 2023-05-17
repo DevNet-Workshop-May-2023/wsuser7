@@ -1,0 +1,248 @@
+- name: Play 1 Create 3 Tier App
+  hosts: all
+  gather_facts: no
+###
+  vars_prompt:
+
+    - name: tenant_name
+      prompt: Name of ACI tenant?
+      private: false
+
+  vars:
+    vrf_name: "{{ tenant_name }}_VRF"
+    ap_name: "{{ tenant_name }}_AP"
+    bd_name: "{{ tenant_name }}_BD"
+
+  tasks:
+    - set_fact:
+        aci_login: &aci_login
+          host: "{{ inventory_hostname }}"
+          username: "wsuser7"
+          password: "DevnetWorkshop!"
+          use_ssl: yes
+          validate_certs: no
+
+### Tenant Config ###
+    - name: Set {{ tenant_name }} Tenant
+      cisco.aci.aci_tenant:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        state: present
+      register: qResult 
+      delegate_to: localhost
+
+    - name: Add a new VRF to {{ tenant_name }}
+      aci_vrf:
+        <<: *aci_login
+        vrf: "{{ vrf_name }}"
+        tenant: "{{ tenant_name }}"
+        descr: TestVRFBestVrf 
+        policy_control_preference: enforced
+        policy_control_direction: ingress
+        state: present
+      delegate_to: localhost
+
+    - name: Add AP
+      aci_ap:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        ap: "{{ ap_name }}"
+        description: TestAppBestApp ap for {{ tenant_name }}
+        state: present
+      delegate_to: localhost
+
+    - name: Add Bridge Domain
+      aci_bd:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        bd: "{{ bd_name }}"
+        vrf: "{{ vrf_name }}"
+        state: present
+      delegate_to: localhost
+
+    - name: Create a subnet
+      aci_bd_subnet:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        bd: "{{ bd_name }}"
+        gateway: 192.168.134.1
+        mask: 24
+        state: present
+      delegate_to: localhost
+
+### EPG Loop
+    - name: Add a new Webserver EPG
+      aci_epg:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        ap: "{{ ap_name }}"
+        epg: "{{ item }}"
+        description: "{{ item }} EPG for {{ tenant_name }}"
+        bd: "{{ bd_name }}"
+        preferred_group: yes
+        state: present
+      delegate_to: localhost
+      loop:
+        - webserver
+        - dbserver
+        - appserver
+
+### Contract
+    - name: Add a new web to app contract
+      aci_contract:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        contract: web_to_app
+        description: Communication between web-servers and TestApp
+        scope: application-profile
+        state: present
+      delegate_to: localhost
+
+    - name: Add a new contract subject
+      aci_contract_subject:
+        <<: *aci_login
+        port: 443
+        tenant: "{{ tenant_name }}"
+        contract: web_to_app
+        subject: permit-12345
+        description: web_to_app subject
+        reverse_filter: yes
+        state: present
+      delegate_to: localhost
+
+    - name: Add a new filter to a tenant
+      aci_filter:
+        <<: *aci_login
+        filter: app_filter
+        description: Filter for web protocols
+        tenant: "{{ tenant_name }}"
+        state: present
+      delegate_to: localhost
+
+    - name: Add a new Filter Entry
+      aci_filter_entry:
+        <<: *aci_login
+        state: present
+        entry: testapp
+        tenant: "{{ tenant_name }}"
+        ether_type: ip
+        ip_protocol: tcp
+        dst_port: 12345
+        filter: app_filter
+        descr: appfilter
+      delegate_to: localhost
+
+    - name: Add a new contract subject to filter binding
+      aci_contract_subject_to_filter:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        contract: web_to_app
+        subject: permit-12345
+        filter: app_filter
+        state: present
+      delegate_to: localhost
+
+### Contract
+    - name: Add a new app to db contract
+      aci_contract:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        contract: app_to_db
+        description: Communication between app and db
+        scope: application-profile
+        state: present
+      delegate_to: localhost
+
+    - name: Add a new contract subject
+      aci_contract_subject:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        contract: app_to_db
+        subject: permit-1433
+        description: app_to_db subject
+        reverse_filter: yes
+        state: present
+      delegate_to: localhost
+
+    - name: Add a new filter to a tenant
+      aci_filter:
+        <<: *aci_login
+        filter: db_filter
+        description: Filter for db protocols
+        tenant: "{{ tenant_name }}"
+        state: present
+      delegate_to: localhost
+
+    - name: Add a new Filter Entry
+      aci_filter_entry:
+        <<: *aci_login
+        state: present
+        entry: db
+        tenant: "{{ tenant_name }}"
+        ether_type: ip
+        ip_protocol: tcp
+        dst_port: 1433
+        filter: db_filter
+        descr: dbfilter
+      delegate_to: localhost
+
+    - name: Add a new contract subject to filter binding
+      aci_contract_subject_to_filter:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        contract: app_to_db
+        subject: permit-1433
+        filter: db_filter
+        state: present
+      delegate_to: localhost
+
+###  Contract Binding
+    - name: Add a new contract to EPG binding
+      aci_epg_to_contract:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        ap: "{{ ap_name }}"
+        epg: webserver
+        contract: web_to_app
+        contract_type: provider
+        state: present
+      delegate_to: localhost
+
+    - name: Add a new contract to EPG binding
+      aci_epg_to_contract:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        ap: "{{ ap_name }}"
+        epg: appserver
+        contract: web_to_app
+        contract_type: consumer
+        state: present
+      delegate_to: localhost     
+
+    - name: Add a new contract to EPG binding
+      aci_epg_to_contract:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        ap: "{{ ap_name }}"
+        epg: appserver
+        contract: app_to_db
+        contract_type: provider
+        state: present
+      delegate_to: localhost
+
+    - name: Add a new contract to EPG binding
+      aci_epg_to_contract:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        ap: "{{ ap_name }}"
+        epg: dbserver
+        contract: app_to_db
+        contract_type: consumer
+        state: present
+      delegate_to: localhost
+
+    - name: Recursively copy files from management server to target
+      ansible.builtin.copy:
+        content: "{{ qResult }}"
+        dest: /home/atoumeh/devWorkshop/CodeRepo-main/backup.txt
+      delegate_to: localhost

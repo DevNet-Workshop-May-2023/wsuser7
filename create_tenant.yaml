@@ -1,0 +1,47 @@
+- name: Play 1 Create the Demo Tenant
+  hosts: all
+  gather_facts: no
+######
+#  vars_prompt:
+#
+#   - name: tenant_name
+#     prompt: Name of ACI tenant?
+#     private: false
+
+  vars:
+    tenant_pfx: wsuser
+    tenant_sfx: 7
+    tenant_name: "{{ tenant_pfx }}{{ tenant_sfx }}"
+
+  tasks:
+    - set_fact:
+        aci_login: &aci_login
+          host: "{{ inventory_hostname }}"
+          username: "wsuser7"
+          password: "DevnetWorkshop!"
+          use_ssl: yes
+          validate_certs: no
+
+######### Tenant Config ##########
+    - name: Set {{ tenant_name }} Tenant
+      aci_tenant:
+        <<: *aci_login
+        tenant: "{{ tenant_name }}"
+        state: present
+      register: qResult 
+      delegate_to: localhost
+
+    - name: Print return information from the previous task
+      ansible.builtin.debug:
+        var: qResult
+
+    - name: Set {{ tenant_name }} Tenant
+      aci_tenant:
+        <<: *aci_login
+        tenant: "{{ tenant_pfx }}{{ tenant_sfx + item }}"
+        state: present
+      register: qResult 
+      delegate_to: localhost
+      loop:
+        - 100
+        - 200
